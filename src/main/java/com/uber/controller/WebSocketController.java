@@ -3,8 +3,10 @@ package com.uber.controller;
 import com.uber.dto.LocationUpdateDto;
 import com.uber.dto.TripRequestDto;
 import com.uber.dto.TripResponseDto;
+import com.uber.dto.TripAcceptDto;
 import com.uber.model.LocationUpdate;
 import com.uber.model.User;
+import com.uber.model.TripStatus;
 import com.uber.service.LocationService;
 import com.uber.service.TripService;
 import org.slf4j.Logger;
@@ -129,7 +131,8 @@ public class WebSocketController {
      */
     @MessageMapping("/trip.accept/{tripId}")
     public void acceptTrip(@DestinationVariable Long tripId,
-                           @Payload Long driverId) {
+                           @Payload TripAcceptDto payload) {
+        Long driverId = payload != null ? payload.getDriverId() : null;
         log.info("✋ Conductor {} intenta aceptar viaje {}", driverId, tripId);
 
         try {
@@ -178,6 +181,62 @@ public class WebSocketController {
 
         } catch (Exception e) {
             log.error("❌ Error al rechazar viaje {}: {}", tripId, e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // Iniciar viaje (En curso)
+    // =========================================================================
+
+    /**
+     * Cambia el estado del viaje a IN_PROGRESS cuando el conductor recoge al pasajero.
+     * Notifica a todos los suscriptores del viaje.
+     */
+    @MessageMapping("/trip.start/{tripId}")
+    public void startTrip(@DestinationVariable Long tripId) {
+        log.info("🚀 Iniciando viaje: {}", tripId);
+
+        try {
+            TripResponseDto response = tripService.updateTripStatus(tripId, TripStatus.IN_PROGRESS);
+
+            // Notificar a los suscriptores del viaje
+            messagingTemplate.convertAndSend(
+                    "/topic/trips/" + tripId,
+                    response
+            );
+
+            log.info("✅ Viaje {} en curso (IN_PROGRESS)", tripId);
+
+        } catch (Exception e) {
+            log.error("❌ Error al iniciar viaje {}: {}", tripId, e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // Completar viaje (Finalizado)
+    // =========================================================================
+
+    /**
+     * Cambia el estado del viaje a COMPLETED cuando llegan al destino.
+     * Notifica a todos los suscriptores del viaje.
+     */
+    @MessageMapping("/trip.complete/{tripId}")
+    public void completeTrip(@DestinationVariable Long tripId) {
+        log.info("🏁 Completando viaje: {}", tripId);
+
+        try {
+            TripResponseDto response = tripService.updateTripStatus(tripId, TripStatus.COMPLETED);
+
+            // Notificar a los suscriptores del viaje
+            messagingTemplate.convertAndSend(
+                    "/topic/trips/" + tripId,
+                    response
+            );
+
+            log.info("✅ Viaje {} completado con éxito (COMPLETED)", tripId);
+
+        } catch (Exception e) {
+            log.error("❌ Error al completar viaje {}: {}", tripId, e.getMessage());
         }
     }
 
